@@ -19,13 +19,66 @@ local function getModData(ref, diff)
 
     if not ref.data.definedDifficulty then
         log:info("Mod Data not found, setting to base Mod Data values.")
-        ref.data.definedDifficulty = { ["baseHealth"] = ref.mobile.health.base, ["baseAgility"] = ref.mobile.agility.base, ["healthMod"] = 0, ["agilityMod"] = 0, ["staticDiff"] = diff, ["diff"] = diff }
+        ref.data.definedDifficulty = {
+            ["baseHealth"] = ref.mobile.health.base, ["baseAtts"] = { ref.mobile.strength.base, ref.mobile.intelligence.base, ref.mobile.willpower.base, ref.mobile.agility.base, ref.mobile.speed.base, ref.mobile.endurance.base, ref.mobile.personality.base, ref.mobile.luck.base },
+            ["healthMod"] = 0, ["attMods"] = { 0, 0, 0, 0, 0, 0, 0, 0 },
+            ["staticDiff"] = diff, ["diff"] = diff
+        }
         ref.modified = true
     else
         log:trace("Saved Mod Data found.")
+        --keep this on for a while
+        if ref.data.definedDifficulty["baseAtts"] == nil then
+            ref.data.definedDifficulty["baseAtts"] = { ref.mobile.strength.base, ref.mobile.intelligence.base, ref.mobile.willpower.base, ref.mobile.agility.base, ref.mobile.speed.base, ref.mobile.endurance.base, ref.mobile.personality.base, ref.mobile.luck.base }
+            ref.data.definedDifficulty["attMods"] = { 0, 0, 0, 0, 0, 0, 0, 0 }
+        end
     end
 
     return ref.data.definedDifficulty
+end
+
+local function isSpellHostile(magicSource)
+    for _, effect in ipairs(magicSource.effects) do
+        if (effect.object.isHarmful) then
+            log:debug("Hostile spell detected.")
+            return true
+        end
+    end
+    log:debug("Non-Hostile spell detected.")
+    return false
+end
+
+local function affectAttribute(ref, cmod, limit, floor, diff, id)
+    local modData = getModData(ref, diff)
+    local name = tes3.attributeName[id - 1]
+
+    --Config or Difficulty Changed since last met
+    if modData.attMods[id] ~= cmod or modData.diff ~= diff then
+        local value = diff * cmod
+        if config.staticMode == true then
+            value = modData.staticDiff * cmod
+            log:debug("Static Difficulty: " .. modData.staticDiff .. "")
+        end
+        if value > limit then
+            value = limit
+        end
+        if value < floor then
+            value = floor
+        end
+        local amount = math.round(modData.baseAtts[id] * ((value + 100) / 100))
+        if config.flatValues == true then
+            amount = modData.baseAtts[id] + value
+        end
+    
+        log:debug("**" .. string.upper(name) .. "**")
+        log:debug("" .. name .. " Mod: " .. value .. "")
+        log:debug("Initial " .. name .. ": " .. modData.baseAtts[id] .. "")
+        log:debug("Final " .. name .. ": " .. amount .. "")
+    
+        --Update Agility
+        tes3.setStatistic({ attribute = id - 1, value = amount, reference = ref })
+        modData.attMods[id] = cmod
+    end
 end
 
 
@@ -134,11 +187,17 @@ local function spellResist(e)
     log:trace("Spell Resist check detected.")
 
     if e.caster == nil then return end
+    if config.affectPositiveSpells == false and isSpellHostile(e.source) == false then return end
+    if config.affectLockSpells == false and e.effect and (e.effect.id == 12 or e.effect.id == 13) then
+        log:debug("Lock/Open spell detected.")
+        return
+    end
+    log:debug("Caster is " .. e.caster.object.name .. " and target is " .. e.target.object.name .. ".")
 
     local diff = (tes3.worldController.difficulty) * 100
     local mod
 
-    if e.target == tes3.player then
+    if e.target == tes3.player and e.caster ~= tes3.player then
         mod = diff * config.playerResist
         if mod > config.resistLimitPlayer then
             mod = config.resistLimitPlayer
@@ -159,7 +218,7 @@ local function spellResist(e)
         log:debug("Initial Resist: " .. e.resistedPercent .. "")
         log:debug("Final Resist: " .. amount .. "")
         e.resistedPercent = amount
-    elseif e.caster == tes3.player then
+    elseif e.caster == tes3.player and e.target ~= tes3.player then
         mod = diff * config.npcResist
         if mod > config.resistLimitNPC then
             mod = config.resistLimitNPC
@@ -234,55 +293,37 @@ if config.affectHit == true then
     event.register(tes3.event.calcHitChance, calcHitChance)
 end
 
---Health/Agility
+--Health/Attributes
 local function onMobileActivated(e)
     log:trace("Mobile activation detected.")
     log:debug("Reference: " .. e.reference.object.name .. "")
 
+    if (e.reference.object.objectType ~= tes3.objectType.creature and e.reference.object.objectType ~= tes3.objectType.npc) or e.reference.object.name == "" then
+        log:debug("Invalid mobile.")
+        return
+    end
     if string.startswith(e.reference.object.name, "Summoned") then return end
-    if config.affectHealth == false and config.affectAgility == false then return end
     if e.reference.object.objectType == tes3.objectType.npc and config.blacklistNPC[e.reference.baseObject.id:lower()] then log:debug("Blacklisted.") return end
     if e.reference.object.objectType == tes3.objectType.creature and config.blacklistCreature[e.reference.baseObject.id:lower()] then log:debug("Blacklisted.") return end
 
     local diff = math.round((tes3.worldController.difficulty) * 100)
+    log:debug("Difficulty Slider: " .. diff .. "")
     local modData = getModData(e.reference, diff)
 
-    if config.affectAgility == true then
-        --Config or Difficulty Changed since last met
-        if modData.agilityMod ~= config.agilityMod or modData.diff ~= diff then
-            local mod = diff * config.agilityMod
-            if config.staticMode == true then
-                mod = modData.staticDiff * config.agilityMod
-                log:debug("Static Difficulty: " .. modData.staticDiff .. "")
-            end
-            if mod > config.agilityLimit then
-                mod = config.agilityLimit
-            end
-            if mod < config.agilityFloor then
-                mod = config.agilityFloor
-            end
-            local amount = math.round(modData.baseAgility * ((mod + 100) / 100))
-            if config.flatValues == true then
-                amount = modData.baseAgility + mod
-            end
-        
-            log:debug("Difficulty Slider: " .. diff .. "")
-            log:debug("Agility Mod: " .. mod .. "")
-            log:debug("Initial Agility: " .. modData.baseAgility .. "")
-            log:debug("Final Agility: " .. amount .. "")
-        
-            --Update Agility
-            tes3.setStatistic({ attribute = tes3.attribute.agility, value = amount, reference = e.mobile })
-            modData.agilityMod = config.agilityMod
-            if config.affectHealth == false then
-                modData.diff = diff
-            end
-        end
+    affectAttribute(e.reference, config.strengthMod, config.strengthLimit, config.strengthFloor, diff, 1)
+    affectAttribute(e.reference, config.intelligenceMod, config.intelligenceLimit, config.intelligenceFloor, diff, 2)
+    affectAttribute(e.reference, config.willpowerMod, config.willpowerLimit, config.willpowerFloor, diff, 3)
+    affectAttribute(e.reference, config.agilityMod, config.agilityLimit, config.agilityFloor, diff, 4)
+    affectAttribute(e.reference, config.speedMod, config.speedLimit, config.speedFloor, diff, 5)
+    affectAttribute(e.reference, config.enduranceMod, config.enduranceLimit, config.enduranceFloor, diff, 6)
+    affectAttribute(e.reference, config.personalityMod, config.personalityLimit, config.personalityFloor, diff, 7)
+    affectAttribute(e.reference, config.luckMod, config.luckLimit, config.luckFloor, diff, 8)
+
+    if config.affectHealth == false then
+        modData.diff = diff
+        return
     end
 
-    if config.affectHealth == false then return end
-
-    --Config or Difficulty Changed since last met
     if modData.healthMod ~= config.healthMod or modData.diff ~= diff then
         local mod = diff * config.healthMod
         if config.staticMode == true then
@@ -362,10 +403,10 @@ local function enchantChargeUse(e)
         amount = 1
     end
 
-    log:debug("Difficulty Slider: " .. diff .. "")
-    log:debug("Charge Mod: " .. mod .. "")
-    log:debug("Initial Charge Cost: " .. e.charge .. "")
-    log:debug("Final Charge Cost: " .. amount .. "")
+    log:trace("Difficulty Slider: " .. diff .. "")
+    log:trace("Charge Mod: " .. mod .. "")
+    log:trace("Initial Charge Cost: " .. e.charge .. "")
+    log:trace("Final Charge Cost: " .. amount .. "")
 
     e.charge = amount
 end
@@ -712,8 +753,6 @@ local function calcEnchantmentPrice(e)
     e.price = amount
 end
 event.register(tes3.event.calcEnchantmentPrice, calcEnchantmentPrice)
-
-
 
 
 

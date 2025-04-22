@@ -14,7 +14,7 @@ local function createPage(label)
         noScroll = false,
     }
     page.sidebar:createInfo {
-        text = "                          Defined Difficulty \n\nThis mod enables you to define a new layer of difficulty based on your difficulty slider settings. This allows the difficulty slider to affect things like NPC Health, experience gain, and damage the way you want.\n\nSettings from this mod are applied AFTER your vanilla slider settings. Default settings assume a slider value of 0 or above."
+        text = "                          Defined Difficulty \n\nThis mod enables you to define a new layer of difficulty based on your difficulty slider settings. This allows the difficulty slider to affect things like NPC Health, experience gain, and damage the way you want.\n\nSettings from this mod are applied BEFORE your vanilla slider settings are applied. Default settings assume a slider value of 0 or above."
     }
     page.sidebar:createHyperLink {
         text = "Made by Kleidium",
@@ -30,6 +30,7 @@ end
 
 local function quickCalc(e)
     if tes3.mobilePlayer then
+        --fix this somehow
         local type = config.playerDamage
         local label = "damage"
         local floor = nil
@@ -53,11 +54,46 @@ local function quickCalc(e)
             label = "health"
             limit = config.healthLimit
             floor = config.healthFloor
+        elseif e.label == "NPC Strength Rate" then
+            type = config.strengthMod
+            label = "Strength"
+            limit = config.strengthLimit
+            floor = config.strengthFloor
+        elseif e.label == "NPC Intelligence Rate" then
+            type = config.intelligenceMod
+            label = "Intelligence"
+            limit = config.intelligenceLimit
+            floor = config.intelligenceFloor
+        elseif e.label == "NPC Willpower Rate" then
+            type = config.willpowerMod
+            label = "Willpower"
+            limit = config.willpowerLimit
+            floor = config.willpowerFloor
         elseif e.label == "NPC Agility Rate" then
             type = config.agilityMod
             label = "Agility"
             limit = config.agilityLimit
             floor = config.agilityFloor
+        elseif e.label == "NPC Speed Rate" then
+            type = config.speedMod
+            label = "Speed"
+            limit = config.speedLimit
+            floor = config.speedFloor
+        elseif e.label == "NPC Endurance Rate" then
+            type = config.enduranceMod
+            label = "Endurance"
+            limit = config.enduranceLimit
+            floor = config.enduranceFloor
+        elseif e.label == "NPC Personality Rate" then
+            type = config.personalityMod
+            label = "Personality"
+            limit = config.personalityLimit
+            floor = config.personalityFloor
+        elseif e.label == "NPC Luck Rate" then
+            type = config.luckMod
+            label = "Luck"
+            limit = config.luckLimit
+            floor = config.luckFloor
         elseif e.label == "Alchemy Rate" then
             type = config.alchemyMod
             label = "Potion Strength"
@@ -161,7 +197,7 @@ general:createOnOffButton {
 
 general:createOnOffButton {
     label = "Affect Physical Damage",
-    description = "Determines whether or not physical damage will be affected by this mod. Changing this setting requires a restart to take effect.",
+    description = "Determines whether or not physical damage will be affected by this mod. Changes to physical damage are applied BEFORE the vanilla slider applies. Changing this setting requires a restart to take effect.",
     restartRequired = true,
     variable = mwse.mcm.createTableVariable { id = "affectDamage", table = config }
 }
@@ -175,7 +211,7 @@ general:createOnOffButton {
 
 general:createOnOffButton {
     label = "Affect Spell Resistance",
-    description = "Determines whether or not spell resistance will be affected by this mod. Changing this setting requires a restart to take effect.",
+    description = "Determines whether or not spell resistance will be affected by this mod. Spells cast on Self are NOT affected. Changing this setting requires a restart to take effect.",
     restartRequired = true,
     variable = mwse.mcm.createTableVariable { id = "affectResist", table = config }
 }
@@ -184,6 +220,18 @@ general:createOnOffButton {
     label = "Cap Spell Resistance",
     description = "Turn on or off the Spell Resistance cap. With the cap, spell resistance will never rise above 100. Resistances above 100 may display strange behavior.\n\nExample: Resistances above 100 can result in damage spells providing healing instead.",
     variable = mwse.mcm.createTableVariable { id = "capResist", table = config }
+}
+
+general:createOnOffButton {
+    label = "Affect Non-Hostile Spells",
+    description = "Choose whether or not Non-Hostile spells will be affected by your Spell Resistance settings. When turned on, Player/NPC Spell Resistance settings affect non-hostile spells.\n\nExample: Your settings give NPCs 50% spell resistance. With this turned on, the player's non-hostile spells (healing/calming/charming etc) are 50% less effective on NPCs as well.",
+    variable = mwse.mcm.createTableVariable { id = "affectPositiveSpells", table = config }
+}
+
+general:createOnOffButton {
+    label = "Affect Lock/Open Spells",
+    description = "Choose whether or not Lock/Open spells will be affected by your Spell Resistance settings. When turned on, NPC Spell Resistance settings affect the player's Lock/Open spells.\n\nExample: Your settings give NPCs 50% spell resistance. With this turned on, doors and chests also have 50% Spell Resistance to Lock/Open spells, requiring a higher magnitude to be effective.",
+    variable = mwse.mcm.createTableVariable { id = "affectLockSpells", table = config }
 }
 
 general:createDropdown {
@@ -829,6 +877,141 @@ att:createSlider {
     }
 }
 
+--Strength--
+att:createOnOffButton {
+    label = "Affect NPC Strength",
+    description = "Determines whether or not NPC Strength will be affected by difficulty.\n\nAffects NPC weapon damage, carry weight, and maximum fatigue.",
+    variable = mwse.mcm.createTableVariable { id = "affectStrength", table = config }
+}
+
+att:createSlider {
+    label = "NPC Strength Rate",
+    description = "Controls the rate at which an NPC's Strength is affected by difficulty.\n\nIt is best to move cells after making changes. If this does not update Strength, save and reload.\n\nDefault: +0.30% Strength (or +0.30 Strength in Flat Value Mode) per difficulty point.",
+    max = 20.00,
+    min = -20.00,
+    step = 0.01,
+    jump = 0.10,
+    decimalPlaces = 2,
+    callback = quickCalc,
+    variable = EasyMCM:createTableVariable {
+        id = "strengthMod",
+        table = config
+    }
+}
+
+att:createSlider {
+    label = "NPC Strength Limit",
+    description = "The maximum amount that an NPC's Strength can be increased by. Represented as a whole number.\n\nDefault: 1000% Strength increase or +1000 Strength in Flat Value Mode.",
+    max = 2000,
+    min = 100,
+    jump = 10,
+    variable = EasyMCM:createTableVariable {
+        id = "strengthLimit",
+        table = config
+    }
+}
+
+att:createSlider {
+    label = "NPC Strength Floor",
+    description = "The maximum amount that an NPC's Strength can be reduced by. \n\nDefault: 75% Strength reduction or -75 Strength in Flat Value Mode.",
+    max = 0,
+    min = -100,
+    variable = EasyMCM:createTableVariable {
+        id = "strengthFloor",
+        table = config
+    }
+}
+
+--Intelligence--
+att:createOnOffButton {
+    label = "Affect NPC Intelligence",
+    description = "Determines whether or not NPC Intelligence will be affected by difficulty.\n\nAffects NPC magicka pools.",
+    variable = mwse.mcm.createTableVariable { id = "affectIntelligence", table = config }
+}
+
+att:createSlider {
+    label = "NPC Intelligence Rate",
+    description = "Controls the rate at which an NPC's Intelligence is affected by difficulty.\n\nIt is best to move cells after making changes. If this does not update Intelligence, save and reload.\n\nDefault: +0.30% Intelligence (or +0.30 Intelligence in Flat Value Mode) per difficulty point.",
+    max = 20.00,
+    min = -20.00,
+    step = 0.01,
+    jump = 0.10,
+    decimalPlaces = 2,
+    callback = quickCalc,
+    variable = EasyMCM:createTableVariable {
+        id = "intelligenceMod",
+        table = config
+    }
+}
+
+att:createSlider {
+    label = "NPC Intelligence Limit",
+    description = "The maximum amount that an NPC's Intelligence can be increased by. Represented as a whole number.\n\nDefault: 1000% Intelligence increase or +1000 Intelligence in Flat Value Mode.",
+    max = 2000,
+    min = 100,
+    jump = 10,
+    variable = EasyMCM:createTableVariable {
+        id = "intelligenceLimit",
+        table = config
+    }
+}
+
+att:createSlider {
+    label = "NPC Intelligence Floor",
+    description = "The maximum amount that an NPC's Intelligence can be reduced by. \n\nDefault: 75% Intelligence reduction or -75 Intelligence in Flat Value Mode.",
+    max = 0,
+    min = -100,
+    variable = EasyMCM:createTableVariable {
+        id = "intelligenceFloor",
+        table = config
+    }
+}
+
+--Willpower--
+att:createOnOffButton {
+    label = "Affect NPC Willpower",
+    description = "Determines whether or not NPC Willpower will be affected by difficulty.\n\nAffects NPC cast chance, paralyze/silence resistance, and maximum fatigue.",
+    variable = mwse.mcm.createTableVariable { id = "affectWillpower", table = config }
+}
+
+att:createSlider {
+    label = "NPC Willpower Rate",
+    description = "Controls the rate at which an NPC's Willpower is affected by difficulty.\n\nIt is best to move cells after making changes. If this does not update Willpower, save and reload.\n\nDefault: +0.30% Willpower (or +0.30 Willpower in Flat Value Mode) per difficulty point.",
+    max = 20.00,
+    min = -20.00,
+    step = 0.01,
+    jump = 0.10,
+    decimalPlaces = 2,
+    callback = quickCalc,
+    variable = EasyMCM:createTableVariable {
+        id = "willpowerMod",
+        table = config
+    }
+}
+
+att:createSlider {
+    label = "NPC Willpower Limit",
+    description = "The maximum amount that an NPC's Willpower can be increased by. Represented as a whole number.\n\nDefault: 1000% Willpower increase or +1000 Willpower in Flat Value Mode.",
+    max = 2000,
+    min = 100,
+    jump = 10,
+    variable = EasyMCM:createTableVariable {
+        id = "willpowerLimit",
+        table = config
+    }
+}
+
+att:createSlider {
+    label = "NPC Willpower Floor",
+    description = "The maximum amount that an NPC's Willpower can be reduced by. \n\nDefault: 75% Willpower reduction or -75 Willpower in Flat Value Mode.",
+    max = 0,
+    min = -100,
+    variable = EasyMCM:createTableVariable {
+        id = "willpowerFloor",
+        table = config
+    }
+}
+
 --Agility--
 att:createOnOffButton {
     label = "Affect NPC Agility",
@@ -874,6 +1057,185 @@ att:createSlider {
     }
 }
 
+--Speed--
+att:createOnOffButton {
+    label = "Affect NPC Speed",
+    description = "Determines whether or not NPC Speed will be affected by difficulty.\n\nAffects NPC movement speed.",
+    variable = mwse.mcm.createTableVariable { id = "affectSpeed", table = config }
+}
+
+att:createSlider {
+    label = "NPC Speed Rate",
+    description = "Controls the rate at which an NPC's Speed is affected by difficulty.\n\nIt is best to move cells after making changes. If this does not update Speed, save and reload.\n\nDefault: +0.30% Speed (or +0.30 Speed in Flat Value Mode) per difficulty point.",
+    max = 20.00,
+    min = -20.00,
+    step = 0.01,
+    jump = 0.10,
+    decimalPlaces = 2,
+    callback = quickCalc,
+    variable = EasyMCM:createTableVariable {
+        id = "speedMod",
+        table = config
+    }
+}
+
+att:createSlider {
+    label = "NPC Speed Limit",
+    description = "The maximum amount that an NPC's Speed can be increased by. Represented as a whole number.\n\nDefault: 1000% Speed increase or +1000 Speed in Flat Value Mode.",
+    max = 2000,
+    min = 100,
+    jump = 10,
+    variable = EasyMCM:createTableVariable {
+        id = "speedLimit",
+        table = config
+    }
+}
+
+att:createSlider {
+    label = "NPC Speed Floor",
+    description = "The maximum amount that an NPC's Speed can be reduced by. \n\nDefault: 75% Speed reduction or -75 Speed in Flat Value Mode.",
+    max = 0,
+    min = -100,
+    variable = EasyMCM:createTableVariable {
+        id = "speedFloor",
+        table = config
+    }
+}
+
+--Endurance--
+att:createOnOffButton {
+    label = "Affect NPC Endurance",
+    description = "Determines whether or not NPC Endurance will be affected by difficulty.\n\nAffects NPC maximum fatigue and fatigue regeneration.",
+    variable = mwse.mcm.createTableVariable { id = "affectEndurance", table = config }
+}
+
+att:createSlider {
+    label = "NPC Endurance Rate",
+    description = "Controls the rate at which an NPC's Endurance is affected by difficulty.\n\nIt is best to move cells after making changes. If this does not update Endurance, save and reload.\n\nDefault: +0.30% Endurance (or +0.30 Endurance in Flat Value Mode) per difficulty point.",
+    max = 20.00,
+    min = -20.00,
+    step = 0.01,
+    jump = 0.10,
+    decimalPlaces = 2,
+    callback = quickCalc,
+    variable = EasyMCM:createTableVariable {
+        id = "enduranceMod",
+        table = config
+    }
+}
+
+att:createSlider {
+    label = "NPC Endurance Limit",
+    description = "The maximum amount that an NPC's Endurance can be increased by. Represented as a whole number.\n\nDefault: 1000% Endurance increase or +1000 Endurance in Flat Value Mode.",
+    max = 2000,
+    min = 100,
+    jump = 10,
+    variable = EasyMCM:createTableVariable {
+        id = "enduranceLimit",
+        table = config
+    }
+}
+
+att:createSlider {
+    label = "NPC Endurance Floor",
+    description = "The maximum amount that an NPC's Endurance can be reduced by. \n\nDefault: 75% Endurance reduction or -75 Endurance in Flat Value Mode.",
+    max = 0,
+    min = -100,
+    variable = EasyMCM:createTableVariable {
+        id = "enduranceFloor",
+        table = config
+    }
+}
+
+--Personality--
+att:createOnOffButton {
+    label = "Affect NPC Personality",
+    description = "Determines whether or not NPC Personality will be affected by difficulty.\n\nProbably doesn't affect anything on its own, but included all the same for mods that use NPC personality in calculations.",
+    variable = mwse.mcm.createTableVariable { id = "affectPersonality", table = config }
+}
+
+att:createSlider {
+    label = "NPC Personality Rate",
+    description = "Controls the rate at which an NPC's Personality is affected by difficulty.\n\nIt is best to move cells after making changes. If this does not update Personality, save and reload.\n\nDefault: +0.30% Personality (or +0.30 Personality in Flat Value Mode) per difficulty point.",
+    max = 20.00,
+    min = -20.00,
+    step = 0.01,
+    jump = 0.10,
+    decimalPlaces = 2,
+    callback = quickCalc,
+    variable = EasyMCM:createTableVariable {
+        id = "personalityMod",
+        table = config
+    }
+}
+
+att:createSlider {
+    label = "NPC Personality Limit",
+    description = "The maximum amount that an NPC's Personality can be increased by. Represented as a whole number.\n\nDefault: 1000% Personality increase or +1000 Personality in Flat Value Mode.",
+    max = 2000,
+    min = 100,
+    jump = 10,
+    variable = EasyMCM:createTableVariable {
+        id = "personalityLimit",
+        table = config
+    }
+}
+
+att:createSlider {
+    label = "NPC Personality Floor",
+    description = "The maximum amount that an NPC's Personality can be reduced by. \n\nDefault: 75% Personality reduction or -75 Personality in Flat Value Mode.",
+    max = 0,
+    min = -100,
+    variable = EasyMCM:createTableVariable {
+        id = "personalityFloor",
+        table = config
+    }
+}
+
+--Luck--
+att:createOnOffButton {
+    label = "Affect NPC Luck",
+    description = "Determines whether or not NPC Luck will be affected by difficulty.\n\nAffects many things an NPC does in a small way, such as their hit/cast chance.",
+    variable = mwse.mcm.createTableVariable { id = "affectLuck", table = config }
+}
+
+att:createSlider {
+    label = "NPC Luck Rate",
+    description = "Controls the rate at which an NPC's Luck is affected by difficulty.\n\nIt is best to move cells after making changes. If this does not update Luck, save and reload.\n\nDefault: +0.30% Luck (or +0.30 Luck in Flat Value Mode) per difficulty point.",
+    max = 20.00,
+    min = -20.00,
+    step = 0.01,
+    jump = 0.10,
+    decimalPlaces = 2,
+    callback = quickCalc,
+    variable = EasyMCM:createTableVariable {
+        id = "luckMod",
+        table = config
+    }
+}
+
+att:createSlider {
+    label = "NPC Luck Limit",
+    description = "The maximum amount that an NPC's Luck can be increased by. Represented as a whole number.\n\nDefault: 1000% Luck increase or +1000 Luck in Flat Value Mode.",
+    max = 2000,
+    min = 100,
+    jump = 10,
+    variable = EasyMCM:createTableVariable {
+        id = "luckLimit",
+        table = config
+    }
+}
+
+att:createSlider {
+    label = "NPC Luck Floor",
+    description = "The maximum amount that an NPC's Luck can be reduced by. \n\nDefault: 75% Luck reduction or -75 Luck in Flat Value Mode.",
+    max = 0,
+    min = -100,
+    variable = EasyMCM:createTableVariable {
+        id = "luckFloor",
+        table = config
+    }
+}
 
 
 local eco = createPage("Economy Settings")----------------------------------------------------------------------------------------------------------------------------
