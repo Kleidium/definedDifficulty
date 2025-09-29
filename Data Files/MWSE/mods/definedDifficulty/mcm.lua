@@ -228,6 +228,13 @@ general:createOnOffButton {
     variable = mwse.mcm.createTableVariable { id = "affectPositiveSpells", table = config }
 }
 
+--Affect Calm and Charm
+general:createOnOffButton {
+    label = "Calm and Charm as Hostile Spells",
+    description = "Determines whether or not calm and charm effects are considered hostile by this mod's spell resistance settings. If considered hostile, Calm and Charm effects are treated on par with Damage Health rather than Restore Health. Only useful if \"Affect Non-Hostile Spells\" is turned off.",
+    variable = mwse.mcm.createTableVariable { id = "hostileIllusion", table = config }
+}
+
 general:createOnOffButton {
     label = "Affect Lock/Open Spells",
     description = "Choose whether or not Lock/Open spells will be affected by your Spell Resistance settings. When turned on, NPC Spell Resistance settings affect the player's Lock/Open spells.\n\nExample: Your settings give NPCs 50% spell resistance. With this turned on, doors and chests also have 50% Spell Resistance to Lock/Open spells, requiring a higher magnitude to be effective.",
@@ -1522,7 +1529,16 @@ template:createExclusionsPage({
     filters = {
         {
             label = "Creatures",
-            callback = function() return getObjects(tes3.objectType.creature) end
+            callback = function()
+                    local baseCreatures = {}
+                    for obj in tes3.iterateObjects(tes3.objectType.creature) do
+                        if not (obj.baseObject and obj.baseObject.id ~= obj.id ) then
+                            baseCreatures[#baseCreatures+1] = (obj.baseObject or obj).id:lower()
+                        end
+                    end
+                    table.sort(baseCreatures)
+                    return baseCreatures
+                end
         },
     },
 })

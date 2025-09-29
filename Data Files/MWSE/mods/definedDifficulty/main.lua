@@ -37,11 +37,39 @@ local function getModData(ref, diff)
     return ref.data.definedDifficulty
 end
 
+-- Helper: compute a modulation value and apply limits/floors
+local function computeMod(diff, factor, limit, floor)
+    local mod = diff * factor
+    if limit and mod > limit then mod = limit end
+    if floor and mod < floor then mod = floor end
+    return mod
+end
+
+-- Helper: apply percent-style modification or flat addition depending on config.flatValues
+local function applyPercentMod(initial, mod, doRound)
+    if config.flatValues == true then
+        local amount = initial + mod
+        if doRound then amount = math.round(amount) end
+        return amount
+    else
+        local amount = initial * ((mod + 100) / 100)
+        if doRound then amount = math.round(amount) end
+        return amount
+    end
+end
+
+--- @param magicSource tes3spell|tes3enchantment|tes3alchemy
 local function isSpellHostile(magicSource)
     for _, effect in ipairs(magicSource.effects) do
         if (effect.object.isHarmful) then
             log:debug("Hostile spell detected.")
             return true
+        end
+        if config.hostileIllusion then
+            if effect.id == tes3.effect.calmCreature or effect.id == tes3.effect.calmHumanoid or effect.id == tes3.effect.charm then
+                log:debug("Calm/Charm spell detected.")
+                return true
+            end
         end
     end
     log:debug("Non-Hostile spell detected.")
@@ -75,7 +103,7 @@ local function affectAttribute(ref, cmod, limit, floor, diff, id)
         log:debug("Initial " .. name .. ": " .. modData.baseAtts[id] .. "")
         log:debug("Final " .. name .. ": " .. amount .. "")
     
-        --Update Agility
+        --Update Attribute
         tes3.setStatistic({ attribute = id - 1, value = amount, reference = ref })
         modData.attMods[id] = cmod
     end
@@ -92,17 +120,8 @@ local function physicalDamage(e)
     local mod
 
     if e.attackerReference == tes3.player then
-        mod = diff * config.playerDamage
-        if mod > config.damageLimitPlayer then
-            mod = config.damageLimitPlayer
-        end
-        if mod < config.damageFloorPlayer then
-            mod = config.damageFloorPlayer
-        end
-        local amount = math.round(e.damage * ((mod + 100) / 100))
-        if config.flatValues == true then
-            amount = e.damage + mod
-        end
+        mod = computeMod(diff, config.playerDamage, config.damageLimitPlayer, config.damageFloorPlayer)
+        local amount = applyPercentMod(e.damage, mod, true)
         log:debug("Attacker: Player")
         log:debug("Difficulty Slider: " .. diff .. "")
         log:debug("Damage Mod: " .. mod .. "")
@@ -110,17 +129,8 @@ local function physicalDamage(e)
         log:debug("Final Damage: " .. amount .. "")
         e.damage = amount
     elseif e.mobile.reference == tes3.player then
-        mod = diff * config.npcDamage
-        if mod > config.damageLimitNPC then
-            mod = config.damageLimitNPC
-        end
-        if mod < config.damageFloorNPC then
-            mod = config.damageFloorNPC
-        end
-        local amount = math.round(e.damage * ((mod + 100) / 100))
-        if config.flatValues == true then
-            amount = e.damage + mod
-        end
+        mod = computeMod(diff, config.npcDamage, config.damageLimitNPC, config.damageFloorNPC)
+        local amount = applyPercentMod(e.damage, mod, true)
         log:debug("Attacker: NPC")
         log:debug("Difficulty Slider: " .. diff .. "")
         log:debug("Damage Mod: " .. mod .. "")
@@ -142,17 +152,8 @@ local function damageH2H(e)
     local mod
 
     if e.attackerReference == tes3.player then
-        mod = diff * config.playerDamage
-        if mod > config.damageLimitPlayer then
-            mod = config.damageLimitPlayer
-        end
-        if mod < config.damageFloorPlayer then
-            mod = config.damageFloorPlayer
-        end
-        local amount = math.round(e.fatigueDamage * ((mod + 100) / 100))
-        if config.flatValues == true then
-            amount = e.fatigueDamage + mod
-        end
+        mod = computeMod(diff, config.playerDamage, config.damageLimitPlayer, config.damageFloorPlayer)
+        local amount = applyPercentMod(e.fatigueDamage, mod, true)
         log:debug("Attacker: Player")
         log:debug("Difficulty Slider: " .. diff .. "")
         log:debug("Damage Mod: " .. mod .. "")
@@ -160,17 +161,8 @@ local function damageH2H(e)
         log:debug("Final Damage: " .. amount .. "")
         e.fatigueDamage = amount
     elseif e.mobile.reference == tes3.player then
-        mod = diff * config.npcDamage
-        if mod > config.damageLimitNPC then
-            mod = config.damageLimitNPC
-        end
-        if mod < config.damageFloorNPC then
-            mod = config.damageFloorNPC
-        end
-        local amount = math.round(e.fatigueDamage * ((mod + 100) / 100))
-        if config.flatValues == true then
-            amount = e.fatigueDamage + mod
-        end
+        mod = computeMod(diff, config.npcDamage, config.damageLimitNPC, config.damageFloorNPC)
+        local amount = applyPercentMod(e.fatigueDamage, mod, true)
         log:debug("Attacker: NPC")
         log:debug("Difficulty Slider: " .. diff .. "")
         log:debug("Damage Mod: " .. mod .. "")
@@ -198,20 +190,9 @@ local function spellResist(e)
     local mod
 
     if e.target == tes3.player and e.caster ~= tes3.player then
-        mod = diff * config.playerResist
-        if mod > config.resistLimitPlayer then
-            mod = config.resistLimitPlayer
-        end
-        if mod < config.resistFloorPlayer then
-            mod = config.resistFloorPlayer
-        end
-        --local amount = math.round(e.resistedPercent * ((mod + 100) / 100))
+        mod = computeMod(diff, config.playerResist, config.resistLimitPlayer, config.resistFloorPlayer)
         local amount = e.resistedPercent + mod
-        if config.capResist == true then
-            if amount > 100 then
-                amount = 100
-            end
-        end
+        if config.capResist == true and amount > 100 then amount = 100 end
         log:debug("Defender: Player")
         log:debug("Difficulty Slider: " .. diff .. "")
         log:debug("Spell Resist Mod: " .. mod .. "")
@@ -219,20 +200,9 @@ local function spellResist(e)
         log:debug("Final Resist: " .. amount .. "")
         e.resistedPercent = amount
     elseif e.caster == tes3.player and e.target ~= tes3.player then
-        mod = diff * config.npcResist
-        if mod > config.resistLimitNPC then
-            mod = config.resistLimitNPC
-        end
-        if mod < config.resistFloorNPC then
-            mod = config.resistFloorNPC
-        end
-        --local amount = math.round(e.resistedPercent * ((mod + 100) / 100))
+        mod = computeMod(diff, config.npcResist, config.resistLimitNPC, config.resistFloorNPC)
         local amount = e.resistedPercent + mod
-        if config.capResist == true then
-            if amount > 100 then
-                amount = 100
-            end
-        end
+        if config.capResist == true and amount > 100 then amount = 100 end
         log:debug("Defender: NPC")
         log:debug("Difficulty Slider: " .. diff .. "")
         log:debug("Spell Resist Mod: " .. mod .. "")
@@ -252,17 +222,8 @@ local function calcHitChance(e)
     local mod
 
     if e.attacker == tes3.player then
-        mod = diff * config.playerHit
-        if mod > config.hitLimitPlayer then
-            mod = config.hitLimitPlayer
-        end
-        if mod < config.hitFloorPlayer then
-            mod = config.hitFloorPlayer
-        end
-        local amount = math.round(e.hitChance * ((mod + 100) / 100))
-        if config.flatValues == true then
-            amount = e.hitChance + mod
-        end
+        mod = computeMod(diff, config.playerHit, config.hitLimitPlayer, config.hitFloorPlayer)
+        local amount = applyPercentMod(e.hitChance, mod, true)
         log:debug("Attacker: Player")
         log:debug("Difficulty Slider: " .. diff .. "")
         log:debug("Hit Mod: " .. mod .. "")
@@ -270,17 +231,8 @@ local function calcHitChance(e)
         log:debug("Final Hit Chance: " .. amount .. "")
         e.hitChance = amount
     elseif e.target ~= nil and e.target == tes3.player then
-        mod = diff * config.npcHit
-        if mod > config.hitLimitNPC then
-            mod = config.hitLimitNPC
-        end
-        if mod < config.hitFloorNPC then
-            mod = config.hitFloorNPC
-        end
-        local amount = math.round(e.hitChance * ((mod + 100) / 100))
-        if config.flatValues == true then
-            amount = e.hitChance + mod
-        end
+        mod = computeMod(diff, config.npcHit, config.hitLimitNPC, config.hitFloorNPC)
+        local amount = applyPercentMod(e.hitChance, mod, true)
         log:debug("Attacker: NPC")
         log:debug("Difficulty Slider: " .. diff .. "")
         log:debug("Hit Mod: " .. mod .. "")
@@ -319,7 +271,7 @@ local function onMobileActivated(e)
     affectAttribute(e.reference, config.personalityMod, config.personalityLimit, config.personalityFloor, diff, 7)
     affectAttribute(e.reference, config.luckMod, config.luckLimit, config.luckFloor, diff, 8)
 
-    if config.affectHealth == false then
+    if config.affectHealth == false or e.mobile.health.current <= 0 then
         modData.diff = diff
         return
     end
@@ -364,14 +316,8 @@ local function castChance(e)
     log:trace("Cast Detected.")
 
     local diff = math.round((tes3.worldController.difficulty) * 100)
-    local mod = config.castMod * diff
-    if mod < config.castFloor then
-        mod = config.castFloor
-    end
-    local amount = math.round(e.castChance * ((mod + 100) / 100))
-    if config.flatValues == true then
-        amount = e.castChance + mod
-    end
+    local mod = computeMod(diff, config.castMod, nil, config.castFloor)
+    local amount = applyPercentMod(e.castChance, mod, true)
 
     log:debug("Difficulty Slider: " .. diff .. "")
     log:debug("Cast Mod: " .. mod .. "")
@@ -387,18 +333,8 @@ local function enchantChargeUse(e)
     log:trace("Charge Use Detected.")
 
     local diff = math.round((tes3.worldController.difficulty) * 100)
-    local mod = config.chargeMod * diff
-    if mod > config.chargeLimit then
-        mod = config.chargeLimit
-    end
-    if mod < config.chargeFloor then
-        mod = config.chargeFloor
-    end
-
-    local amount = e.charge * ((mod + 100) / 100)
-    if config.flatValues == true then
-        amount = e.charge + mod
-    end
+    local mod = computeMod(diff, config.chargeMod, config.chargeLimit, config.chargeFloor)
+    local amount = applyPercentMod(e.charge, mod, false)
     if amount < 1 then
         amount = 1
     end
@@ -419,14 +355,8 @@ local function reflectChance(e)
     log:trace("Reflect Detected.")
 
     local diff = math.round((tes3.worldController.difficulty) * 100)
-    local mod = config.reflectMod * diff
-    if mod < config.reflectFloor then
-        mod = config.reflectFloor
-    end
-    local amount = math.round(e.reflectChance * ((mod + 100) / 100))
-    if config.flatValues == true then
-        amount = e.castChance + mod
-    end
+    local mod = computeMod(diff, config.reflectMod, nil, config.reflectFloor)
+    local amount = applyPercentMod(e.reflectChance, mod, true)
 
     log:debug("Difficulty Slider: " .. diff .. "")
     log:debug("Reflect Mod: " .. mod .. "")
@@ -448,14 +378,8 @@ local function lockPick(e)
     log:trace("Lockpicking Detected.")
 
     local diff = math.round((tes3.worldController.difficulty) * 100)
-    local mod = config.lockMod * diff
-    if mod < config.lockFloor then
-        mod = config.lockFloor
-    end
-    local amount = math.round(e.chance * ((mod + 100) / 100))
-    if config.flatValues == true then
-        amount = e.chance + mod
-    end
+    local mod = computeMod(diff, config.lockMod, nil, config.lockFloor)
+    local amount = applyPercentMod(e.chance, mod, true)
 
     log:debug("Difficulty Slider: " .. diff .. "")
     log:debug("Lock Mod: " .. mod .. "")
@@ -472,14 +396,8 @@ local function disarm(e)
     log:trace("Trap Disarm Detected.")
 
     local diff = math.round((tes3.worldController.difficulty) * 100)
-    local mod = config.lockMod * diff
-    if mod < config.lockFloor then
-        mod = config.lockFloor
-    end
-    local amount = math.round(e.chance * ((mod + 100) / 100))
-    if config.flatValues == true then
-        amount = e.chance + mod
-    end
+    local mod = computeMod(diff, config.lockMod, nil, config.lockFloor)
+    local amount = applyPercentMod(e.chance, mod, true)
 
     log:debug("Difficulty Slider: " .. diff .. "")
     log:debug("Disarm Mod: " .. mod .. "")
@@ -495,14 +413,8 @@ local function pickpocket(e)
     log:trace("Pickpocket Detected.")
 
     local diff = math.round((tes3.worldController.difficulty) * 100)
-    local mod = config.pocketMod * diff
-    if mod < config.pocketFloor then
-        mod = config.pocketFloor
-    end
-    local amount = math.round(e.chance * ((mod + 100) / 100))
-    if config.flatValues == true then
-        amount = e.chance + mod
-    end
+    local mod = computeMod(diff, config.pocketMod, nil, config.pocketFloor)
+    local amount = applyPercentMod(e.chance, mod, true)
 
     log:debug("Difficulty Slider: " .. diff .. "")
     log:debug("Pickpocket Mod: " .. mod .. "")
@@ -518,17 +430,8 @@ local function potionStrength(e)
     log:trace("Alchemy Detected.")
 
     local diff = math.round((tes3.worldController.difficulty) * 100)
-    local mod = config.alchemyMod * diff
-    if mod > config.alchemyLimit then
-        mod = config.alchemyLimit
-    end
-    if mod < config.alchemyFloor then
-        mod = config.alchemyFloor
-    end
-    local amount = math.round(e.potionStrength * ((mod + 100) / 100))
-    if config.flatValues == true then
-        amount = e.potionStrength + mod
-    end
+    local mod = computeMod(diff, config.alchemyMod, config.alchemyLimit, config.alchemyFloor)
+    local amount = applyPercentMod(e.potionStrength, mod, true)
     if amount < -1 then
         amount = -1
         log:info("Alchemy settings caused potion to fail!")
@@ -549,17 +452,8 @@ local function repair(e)
         log:trace("Player Repair Detected.")
 
         local diff = math.round((tes3.worldController.difficulty) * 100)
-        local mod = config.repairMod * diff
-        if mod > config.repairLimit then
-            mod = config.repairLimit
-        end
-        if mod < config.repairFloor then
-            mod = config.reparFloor
-        end
-        local amount = math.round(e.repairAmount * ((mod + 100) / 100))
-        if config.flatValues == true then
-            amount = e.repairAmount + mod
-        end
+        local mod = computeMod(diff, config.repairMod, config.repairLimit, config.repairFloor)
+        local amount = applyPercentMod(e.repairAmount, mod, true)
         if amount < 1 then
             amount = 1
         end
@@ -578,16 +472,12 @@ local function skillExperience(e)
     log:trace("Skill Exercise Detected.")
 
     local diff = math.round((tes3.worldController.difficulty) * 100)
-    local mod = config.expMod * diff
-    if mod > config.expLimit then
-        mod = config.expLimit
-    end
-    if mod < config.expFloor then
-        mod = config.expFloor
-    end
-    local amount = e.progress * ((mod + 100) / 100) --don't round it probably because exp is weird
+    local mod = computeMod(diff, config.expMod, config.expLimit, config.expFloor)
+    local amount
     if config.flatValues == true then
         amount = e.progress + mod
+    else
+        amount = e.progress * ((mod + 100) / 100)
     end
     if amount < 0 then
         amount = 0
@@ -614,17 +504,8 @@ local function calcTravelPrice(e)
     log:trace("Travel Price Calc Detected.")
 
     local diff = math.round((tes3.worldController.difficulty) * 100)
-    local mod = config.travelPriceMod * diff
-    if mod > config.travelPriceLimit then
-        mod = config.travelPriceLimit
-    end
-    if mod < config.travelPriceFloor then
-        mod = config.travelPriceFloor
-    end
-    local amount = math.round(e.price * ((mod + 100) / 100))
-    if config.flatValues == true then
-        amount = math.round(e.price + mod)
-    end
+    local mod = computeMod(diff, config.travelPriceMod, config.travelPriceLimit, config.travelPriceFloor)
+    local amount = applyPercentMod(e.price, mod, true)
     if amount < 1 then
         amount = 1
     end
@@ -643,17 +524,8 @@ local function calcRepairPrice(e)
     log:trace("Repair Price Calc Detected.")
 
     local diff = math.round((tes3.worldController.difficulty) * 100)
-    local mod = config.repairPriceMod * diff
-    if mod > config.repairPriceLimit then
-        mod = config.repairPriceLimit
-    end
-    if mod < config.repairPriceFloor then
-        mod = config.repairPriceFloor
-    end
-    local amount = math.round(e.price * ((mod + 100) / 100))
-    if config.flatValues == true then
-        amount = math.round(e.price + mod)
-    end
+    local mod = computeMod(diff, config.repairPriceMod, config.repairPriceLimit, config.repairPriceFloor)
+    local amount = applyPercentMod(e.price, mod, true)
     if amount < 1 then
         amount = 1
     end
@@ -672,17 +544,8 @@ local function calcTrainingPrice(e)
     log:trace("Training Price Calc Detected.")
 
     local diff = math.round((tes3.worldController.difficulty) * 100)
-    local mod = config.trainingPriceMod * diff
-    if mod > config.trainingPriceLimit then
-        mod = config.trainingPriceLimit
-    end
-    if mod < config.trainingPriceFloor then
-        mod = config.trainingPriceFloor
-    end
-    local amount = math.round(e.price * ((mod + 100) / 100))
-    if config.flatValues == true then
-        amount = math.round(e.price + mod)
-    end
+    local mod = computeMod(diff, config.trainingPriceMod, config.trainingPriceLimit, config.trainingPriceFloor)
+    local amount = applyPercentMod(e.price, mod, true)
     if amount < 1 then
         amount = 1
     end
@@ -701,17 +564,8 @@ local function calcSpellmakingPrice(e)
     log:trace("Spellmaking Price Calc Detected.")
 
     local diff = math.round((tes3.worldController.difficulty) * 100)
-    local mod = config.spellmakingPriceMod * diff
-    if mod > config.spellmakingPriceLimit then
-        mod = config.spellmakingPriceLimit
-    end
-    if mod < config.spellmakingPriceFloor then
-        mod = config.spellmakingPriceFloor
-    end
-    local amount = math.round(e.price * ((mod + 100) / 100))
-    if config.flatValues == true then
-        amount = math.round(e.price + mod)
-    end
+    local mod = computeMod(diff, config.spellmakingPriceMod, config.spellmakingPriceLimit, config.spellmakingPriceFloor)
+    local amount = applyPercentMod(e.price, mod, true)
     if amount < 1 then
         amount = 1
     end
@@ -730,17 +584,8 @@ local function calcEnchantmentPrice(e)
     log:trace("Enchanting Price Calc Detected.")
 
     local diff = math.round((tes3.worldController.difficulty) * 100)
-    local mod = config.spellmakingPriceMod * diff
-    if mod > config.spellmakingPriceLimit then
-        mod = config.spellmakingPriceLimit
-    end
-    if mod < config.spellmakingPriceFloor then
-        mod = config.spellmakingPriceFloor
-    end
-    local amount = math.round(e.price * ((mod + 100) / 100))
-    if config.flatValues == true then
-        amount = math.round(e.price + mod)
-    end
+    local mod = computeMod(diff, config.spellmakingPriceMod, config.spellmakingPriceLimit, config.spellmakingPriceFloor)
+    local amount = applyPercentMod(e.price, mod, true)
     if amount < 1 then
         amount = 1
     end
@@ -753,8 +598,6 @@ local function calcEnchantmentPrice(e)
     e.price = amount
 end
 event.register(tes3.event.calcEnchantmentPrice, calcEnchantmentPrice)
-
-
 
 
 --

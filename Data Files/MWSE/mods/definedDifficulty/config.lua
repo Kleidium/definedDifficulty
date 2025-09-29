@@ -110,6 +110,7 @@ local defaultConfig = {
 	enchantingPriceMod = 1.00,
 	enchantingPriceLimit = 1000,
 	enchantingPriceFloor = -75,
+	hostileIllusion = true,
 	logLevel = "INFO",
 	blacklistNPC = {},
 	blacklistCreature = {}
